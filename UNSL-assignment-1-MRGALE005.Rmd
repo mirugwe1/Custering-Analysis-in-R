@@ -1,0 +1,837 @@
+---
+title: "STA5077Z - UnSupervised Learning Assignment 1"
+author: \textcolor{blue}{ALEX MIRUGWE - MRGALE005}
+date: '`r format(Sys.Date(), "%d-%B-%Y")`'
+output: 
+  pdf_document: 
+    fig_caption: yes
+    number_sections: yes
+bibliography: citation.bib
+linkcolor: black
+fontsize: 12pt
+header-includes:
+  - \usepackage{titling}
+  - \pretitle{\begin{center}
+  - \posttitle{\end{center}}
+    \includegraphics[width=2in,height=2in]{C:/Users/User/Documents/logo.jpg}\LARGE\\}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(tinytex.verbose = TRUE)
+
+```
+
+\pagebreak
+```{r, echo=FALSE}
+knitr::include_graphics("C:/Users/User/Documents/declaration.jpg")
+```
+
+\tableofcontents
+\pagebreak
+
+\newpage
+
+\listoffigures
+\listoftables
+\newpage
+
+# Abstract
+
+This assignment aims at discovering whether there exist any regional patterns in the spread of the COVID-19 virus through the use of cluster analysis statistical modeling on the countries COVID data collected from the Our World Data website. The dataset used in this assignment has 30 variables related to COVID-19 cases for 208 different countries. The data was collected from the start of the pandemic to $02^{nd}/09/2020$.
+
+
+The clustering analysis was done using R Programming Language and cluster statistical learning algorithms of Hierarchical clustering, Kmeans, and Partitioning Around Mediods(PAM). A model of six(6) clusters was built and silhouette plots were used to assess the quality of the clustering. And the hierarchical clustering model produced the highest average silhouette width of $\color{red}{\text{0.85}}$. And since different countries on the same continent have been affected differently by the virus, therefore in this regard clustering models couldn't group countries regionally. Countries were clustered depending on how they have been hit by the coronavirus pandemic.
+
+\newpage
+
+```{r  echo=FALSE,cache=FALSE, results=FALSE, warning=FALSE, include=FALSE, warning=FALSE}
+#Loading neccessary libraries
+library(readxl) #for reading the excel dataframe
+library(tidyverse) #dplyr
+library(ggplot2) #visualization
+library(gridExtra)
+library(rworldmap) #global map
+library(cluster) #pam, silhouette functions
+library(factoextra) #fviz_cluster
+library(Amelia) #plot missing values
+library(corrplot) #correlation matrix 
+library (plotrix) #fan plot
+library(cluster)
+library(NbClust)
+library(fpc)
+
+```
+
+# Introduction
+
+The novel COVID-19 coronavirus still possesses a great threat to humans across the globe. Researchers in different parts of the world are having sleepless nights trying to attempt the unanswered questions about this virus. Much is still not known about the COVID-19 pandemic and therefore this assignment attempts to extract some insights from the COVD-19 pandemic data collected from the Our World In Data site (https://ourworldindata.org/).
+
+The main goal of this assignment to try and discover whether there exists any regional patterns in the spread of this virus. The data-set used in this assignment contains various,29 variables related to the COVID-19 cases for 208 countries.
+
+
+# Exploratory Data Analysis
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#loading the data
+covid <- read_xlsx("C:/Users/User/Documents/owid-covid-data.xlsx",sheet = "Data")
+
+#structure of the dataset
+str(covid)
+
+#summary of the dataframe
+summary(covid)
+
+#changing the data-type of continent from character to factor
+covid$continent <- as.factor(covid$continent)
+```
+
+We start our analysis with a global map showing countries' cumulative COVID-19 confirmed cases in each country by $02^{nd}/09/2020$.
+
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#generation countries' ISO codes
+global_map <- joinCountryData2Map(covid, joinCode="NAME", nameJoinColumn="location")
+```
+
+```{r  echo=FALSE, warning=FALSE, fig.width=6,fig.height=4,fig.cap= " The world map showing cummulative COVID-19 confirmed cases, countries colored green have the highest number of total cases, light-organge shaded countries also have relatively high cases and grey colored countries have low confirmed cases. "}
+#ploting global map for total cases
+mapCountryData(global_map, nameColumnToPlot="total_cases", mapTitle=" Total confirmed cases of COVID-19", catMethod = "fixedwidth", colourPalette="terrain",
+               numCats = 100)
+```
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#Total global confirmed cases
+sum(covid$total_cases)
+
+#Percentage of total cases confirmed in North America 
+North_America <- covid %>%
+  filter(continent == "North America") %>%  #filtering out all North America
+  summarise(t = sum(total_cases))#summing up total cases of countries from North America
+(North_America/sum(covid$total_cases))*100
+
+#Percentage of total cases confirmed in Asia
+Asia <- covid %>%
+  filter(continent == "Asia") %>%  #filtering out all Asia
+  summarise(t = sum(total_cases))#summing up total cases of countries from Asia
+(Asia/sum(covid$total_cases)*100)
+
+#Percentage of total cases confirmed in South America 
+South_America <- covid %>%
+  filter(continent == "South America") %>% #filtering out all South America
+  summarise(t = sum(total_cases)) #summing up total cases of countries from South America
+(South_America/sum(covid$total_cases)*100)
+
+#Percentage of total cases confirmed in Europe
+Europe <- covid %>%
+  filter(continent == "Europe") %>%#filtering out all Europe
+  summarise(t = sum(total_cases))#summing up total cases of countries from Europe
+(Europe/sum(covid$total_cases)*100)
+
+#Percentage of total cases confirmed in Africa
+Africa <- covid %>%
+  filter(continent == "Africa") %>% #filtering out all Africa
+  summarise(t = sum(total_cases))#summing up total cases of countries from Africa
+(Africa/sum(covid$total_cases)*100)
+
+#Percentage of total cases confirmed in Oceania
+Oceania <- covid %>%
+  filter(continent == "Oceania") %>% #filtering out all Oceania
+  summarise(t = sum(total_cases))#summing up total cases of countries from Oceania
+(Oceania/sum(covid$total_cases)*100)
+
+```
+
+ The global had registered 25,304,932 cumulative COVID-19 cases by $02^{nd}/09/2020$ with 28.7% of the total cases in North America, 28.6% are in Asia, 25.2% so far confirmed in South America, Europe stands at 12.5% of the total cases, 5.0% and 0.11% in Africa and Oceania respectively.
+
+
+\newpage
+
+```{r  echo=FALSE, warning=FALSE, fig.height = 4,fig.width = 5.5, fig.cap= "The plot above shows that North America has registered more cases (7267630) than any other continent followed by Asia with 7225355 and then South America, Europe, Africa, and lastly Oceania."}
+#finding total number of cases per continent
+covid%>%
+  group_by(continent) %>% #grouping countries per continent
+  summarise(Total = sum(total_cases), .groups = "drop") %>% #getting total cases of each continent
+  #bar graph for continental total cases
+  ggplot(aes(x =reorder(continent,Total) ,Total,fill = continent))+
+  geom_bar(stat="identity",show.legend = F) + labs(x = "Continents",y = "Total Cases",
+                                   title = "Total number of confirmed cases per continent") +
+  geom_text(aes(label = Total), vjust = 1.5) + #labeling bars with number of cases
+  scale_y_log10() + #log transformation of the x-axis
+  theme(plot.title = element_text(hjust = .5)) + theme_classic()
+
+```
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#number of Americans infected
+America <- covid%>%
+  select(location,total_cases)%>%
+  filter(location == "United States")%>%
+  summarise(d =sum(total_cases))
+(America/sum(covid$total_cases))*100
+#percentage of infected Americans
+(America/North_America)*100
+```
+
+United States has 24% of the global virus confirmed cases making it the most highly infected country which almost doubles the second country Brizal. And of the 7,267,630 cases in North America, 83.6% are in the USA.
+
+\newpage
+
+```{r  echo=FALSE, warning=FALSE, fig.height = 5,fig.width = 8.5, fig.cap= "From the plot above, it's clearly seen that North America has more death cases compared to other continents where over 269712 have succumbed to the virus. North America is followed by South America with 204335 death cases and then Europe, Asia, African, and lastly Oceania."}
+#total number of deaths of each continent
+ g <- covid%>%
+  group_by(continent) %>%
+  summarise(total_deaths1 = sum(total_deaths), .groups = "drop") 
+
+#plotting a fan plot for Total number of death cases per continent
+fan.plot(g$total_deaths1,max.span=pi,
+  labels=paste(g$continent,g$total_deaths1,sep="-"),
+  main="Total number of death cases per continent",ticks=276)
+
+```
+
+
+```{r  echo=FALSE, warning=FALSE,, include=FALSE}
+#total global death cases
+sum(covid$total_deaths)
+
+#percentage of dead people to confirmed
+(sum(covid$total_deaths)/sum(covid$total_cases))*100
+
+#Percentage of total death cases  in North America 
+North_America1 <- covid %>%
+  filter(continent == "North America") %>%  #filtering out all North America
+  summarise(r = sum(total_deaths))#summing up total death cases of countries from North America
+(North_America1/sum(covid$total_deaths))*100
+
+#Percentage of total death cases in South America
+South_America1 <- covid %>%
+  filter(continent == "South America") %>%  #filtering out all South America
+  summarise(r = sum(total_deaths))#summing up total cases of countries from South America
+(South_America1/sum(covid$total_deaths)*100)
+
+#Percentage of total death cases in Europe 
+Europe1 <- covid %>%
+  filter(continent == "Europe") %>% #filtering out all Europe
+  summarise(r = sum(total_deaths)) #summing up total cases of countries from Europe
+(Europe1/sum(covid$total_deaths)*100)
+
+#Percentage of total death cases in Asia
+Asia1 <- covid %>%
+  filter(continent == "Asia") %>%#filtering out all Asia
+  summarise(r = sum(total_deaths))#summing up total cases of countries from Asia
+(Asia1/sum(covid$total_deaths)*100)
+
+#Percentage of total death cases in Africa
+Africa1 <- covid %>%
+  filter(continent == "Africa") %>% #filtering out all Africa
+  summarise(r = sum(total_deaths))#summing up total cases of countries from Africa
+(Africa1/sum(covid$total_deaths)*100)
+
+#Percentage of total death cases in Oceania
+Oceania1 <- covid %>%
+  filter(continent == "Oceania") %>% #filtering out all Oceania
+  summarise(r = sum(total_deaths))#summing up total cases of countries from Oceania
+(Oceania1/sum(covid$total_deaths)*100)
+
+
+```
+
+Out of the 25,304,932 global confirmed COVID-19 cases, 828,289 people have succumbed to the virus making it 3.27%. And the percentage continental death cases are shown in the table below;
+
+|Continent    |Percentage death cases (%)|
+|-------------|--------------------------|
+|North America|32.56                     |
+|South Anerica|28.67                     |
+|Europe       |21.63                     |
+|Asia         |17.42                     |
+|Africa       |6.63                      |
+|Oceania      |0.08                      |
+|**Total**    |**100**                   | 
+
+Table: The table showing the percentage of people who have died of the virus per continent. 
+
+\newpage
+
+```{r  echo=FALSE, warning=FALSE, }
+#continental fatality rate
+ h <- covid%>%
+  group_by(continent) %>%
+  summarise(TOTAL_DEATHS = sum(total_deaths),
+            TOTAL_CASES = sum(total_cases),
+            FATALITY_RATE = (TOTAL_DEATHS/TOTAL_CASES)*100,.groups = "drop") %>%
+  arrange(desc(FATALITY_RATE))
+
+h$FATALITY_RATE <- round(h$FATALITY_RATE,2)
+
+#renaming column names
+names(h)[1] <- "Continent"
+names(h)[2] <- "Total Deaths"
+names(h)[3] <- "Total Cases"
+names(h)[4] <- "Fatality Rate (%)"
+
+#tabling these countries
+kableExtra::kable(h,caption = "The table shows the continental total deaths and cases alongside the percentage fatality rates.")
+```
+
+We can see from the table above that Europe has the highest fatality rate of 5.68%. This rate doesn't mean that Europe has the highest number of deaths but it has the highest death rate in relation to the affected people(Total deaths/total cases). Though Asia has one of the highest number of cumulative cases, it's fatality rate is the lowest, 2%.
+
+
+```{r  echo=FALSE, warning=FALSE, fig.height = 3,fig.width =4, fig.cap= "The graph shows that there exists a positive relationship between Total Confirmed COVID-19 cases and deaths. Countries with the highest total cases also have the highest number of deaths."}
+#scatter plot showing relationship between total cases and total deaths
+ggplot(covid,aes(total_cases,total_deaths)) +
+  geom_point(color = "tomato3") + 
+  scale_x_log10() + scale_y_log10() +
+  labs(x = "Total Confirmed cases",y = "Total  deaths",
+       title =  " Relationship between Total Confirmed \n case and deaths ") +
+  theme(plot.title = element_text(hjust = .5)) + 
+  theme_classic()
+
+```
+
+\newpage
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#top ten most affected countries(highest covid cases)
+x <- covid%>%
+  select(location,total_cases)%>%
+  top_n(10)%>%
+  #bar plot for these countries
+  ggplot(aes(x =reorder(location,total_cases) ,total_cases))+
+  geom_bar(stat="identity",show.legend = F,fill = "tomato3") + labs(x = "Countries",y = "Confirmed Cases",
+                                   title = "Top 10 countries with the highest \n COVID-19 Confirmed cases") +
+  geom_text(aes(label = total_cases), hjust = 1) +
+  scale_y_log10() + 
+  theme(plot.title = element_text(hjust = .1)) + theme_classic() + coord_flip() + 
+  theme(axis.text.x = element_text(angle = 90))
+
+#top 10 countries with the highest number of deaths
+y <- covid%>%
+  select(location,total_deaths)%>%
+  top_n(10)%>%
+  #barplot for these countries
+  ggplot(aes(x =reorder(location,total_deaths) ,total_deaths))+
+  geom_bar(stat="identity",show.legend = F,fill = "tomato3") + labs(x = "Countries",y = "Death Cases",
+                                   title = "Top 10 countries with the highest \n COVID-19 death cases") +
+  geom_text(aes(label = total_deaths), hjust = 1) +
+  scale_y_log10() + 
+  theme(plot.title = element_text(hjust = .5)) + theme_classic() + coord_flip() +
+  theme(axis.text.x = element_text(angle = 90))
+
+```
+
+
+```{r  echo=FALSE, warning=FALSE, fig.height = 4,fig.width = 10, fig.cap= "The graphs show the top 10 countries with the highest number of COVID-19 registered cases and deaths."}
+#putting the two plots alongside each other
+grid.arrange(x,y, ncol=2)
+```
+
+
+At first glance, the United States, Brizal, and India have the highest number of COVID cumulative cases and deaths. Countries like South Africa and Argentina have one of the highest number of cases but fewer deaths. And countries such as United Kingdom, Italy, France, and Iran are not among the top 10 countries with the highest virus cases but their death numbers a quite higher making them appear in the first 10 countries with the biggest death numbers.
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#continental new cases
+covid %>%
+  group_by(continent)%>%
+  summarise(total = sum(new_cases),.groups = "drop")
+
+#continental new deaths
+covid %>%
+  group_by(continent)%>%
+  summarise(total_death = sum(new_deaths),.groups = "drop")
+
+```
+
+|Continent    |New Cases |New deaths|
+|-------------|--------- |----------|
+|Africa       |7528      |263       |
+|Asia         |103181    |1692      |
+|Europe       |20930     |368       |
+|North America|55847     |2034      |
+|Oceania      |179       |8         |
+|South America|71293     |2116      |
+|**Total**    |**258958**|**6481**  |
+
+Table: The table shows the new cases and new deaths of the 6 continents with Asia having the highest new cases and South America has the highest new deaths. 
+
+\newpage
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#getting the top 20 highly affected countries
+fatality <- covid%>%
+  select(location,total_cases,total_deaths)%>%
+  #calcaulating the percenatge fatality rate
+  summarise(Country = location,Fatal = (total_deaths/total_cases)*100)%>%
+  #top 20 most affected countries
+  top_n(20)
+
+#arranging the percentage fatality rate in descending order
+fatality <- fatality%>%
+  arrange(desc(Fatal))
+
+#rounding off the percentage fatality rate to 2 decimal places
+fatality$Fatal <-round(fatality$Fatal,2)
+
+```
+
+
+
+```{r  echo=FALSE, warning=FALSE, fig.cap="The graph shows the top 20 highly affected COVID-19 countries globally, the values in the bars of the chart indicate percentage case fatality rate((total death/total cases)*100). Countries at the top(i.e. Yemen, Italy, United Kingdom, etc) have the most death rate proportionally to their COVID cases, but this does not necessarily mean that these countries have the highest death overall."}
+
+#plotting a bar plot of the Top 20 countries with the highest fatality rate
+Fatal_plot <- fatality%>%
+  ggplot(aes(x =reorder(Country,Fatal) ,Fatal))+
+  geom_bar(stat="identity",show.legend = F,fill = "tomato3") + labs(x = "Countries",y = "Fatality Rate(%)",
+                                   title = "Top 20 countries with the highest fatality rate") +
+  geom_text(aes(label = Fatal), hjust = 1) +
+  scale_y_log10() + 
+  theme(plot.title = element_text(hjust = .5)) + theme_classic() + coord_flip() +
+  theme(axis.text.x = element_text(angle = 90))
+
+Fatal_plot
+```
+
+
+
+Looking at the bar chart above, Yemen has the highest fatality rate where 29.05% of her COVID-19 patients have succumbed to the virus. United States, Brazil, and India have the highest death cases in the world but their fatality rates seem low as they don't appear in the 20 most highly affected countries. Also according to the chart, European countries have the highest Mortality rate. Chad with a 7.57% death rate, it's the most affected African Country.
+
+
+
+```{r  echo=FALSE, warning=FALSE,fig.height=5, fig.cap="From the graph, it's seen that there is an increasing relationship between Total cases and New cases. For every continent, countries with the highest confirmed total cases still register the highest number of new cases."}
+#scatter plot showing the realtionship between total cases and new cases
+ggplot(covid,aes(total_cases,new_cases)) + 
+  geom_point(color = "tomato3") +
+  labs(x = "Total cases",y = "New cases",
+       title = "Continental relationship between Total cases and New cases ") +
+  scale_y_log10() + #x-axis log transformation
+  scale_x_log10() + #y-axis log transformation
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = .5)) + 
+    facet_wrap(~continent) # creating continental individual plots 
+
+
+```
+
+```{r  echo=FALSE, warning=FALSE,include=FALSE, fig.height = 4,fig.width = 5.5, fig.cap= "."}
+
+Africa_1 <- covid %>%
+  select(location,continent,total_deaths,new_deaths)%>%
+  filter(continent == "Africa" & (new_deaths > 3 ) )%>%
+  arrange(desc(total_deaths))
+
+plot(log(covid$gdp_per_capita),log(covid$total_cases))
+plot(log(covid$population),log(covid$total_cases))
+plot(log(covid$median_age),log(covid$total_cases))
+plot(covid$aged_65_older,log(covid$total_cases))
+plot(log(covid$aged_70_older),log(covid$total_cases))
+plot(log(covid$extreme_poverty),log(covid$total_cases))
+plot(log(covid$life_expectancy),log(covid$total_cases))
+plot(log(covid$diabetes_prevalence),log(covid$total_cases))
+```
+
+\newpage
+
+
+```{r  echo=FALSE, warning=FALSE,include=FALSE}
+#getting the highest affected countries percentage-wise
+covid_affected <- covid%>%
+  select(location,total_cases,population)%>%
+  #calcualting the percentage of total cases per population
+  summarise(Country = location,Affected_Population = ((total_cases/population)*100))%>%
+  #getting the top ten most affected countries
+  top_n(10)
+
+covid_affected1 <- covid_affected %>%
+  #arraning the affected population percentage variable in descending order.
+   arrange(desc(Affected_Population))
+
+```
+
+|Country       |Affected Population(%)|
+|--------------|----------------------|
+|Qatar         |4.13                  |
+|Bahrain       |3.05                  |
+|Panama        |2.17                  |
+|San Marino    |2.17                  |
+|Chile         |2.16                  |
+|Kawait        |2.01                  |
+|Peru          |1.99                  |
+|Aruba         |1.97                  |
+|Brazil        |1.86                  |
+|United States |1.84                  |
+
+Table: The table shows the top ten countries with the highest percentage of total cases in relation to the population size. Qatar has the highest affected population percentage-wise with 4.13% of its population being affected by the virus.
+
+```{r  echo=FALSE, warning=FALSE,include=FALSE}
+#top ten countries with the highest number of total cases per million
+case_per_million <- covid%>%
+  select(location,total_cases_per_million)%>%
+  top_n(10)%>%
+  ggplot(aes(x=total_cases_per_million, y=reorder(location, total_cases_per_million))) +
+  geom_segment(aes(yend=location), xend=0, colour="grey50")+
+geom_point(size=3,color = "blue") + # Use a larger dot
+labs(x = "Total Cases per million",y = "Countries",
+     title = "Top 10 countries with the highest \n number of total cases per million",
+     caption = "Figure A") +
+theme(panel.grid.major.x = element_blank(),
+panel.grid.minor.x = element_blank(),
+plot.caption = element_text(color = "red", face = "italic"),
+panel.grid.major.y = element_blank())
+
+#top ten countries with the highest number of total deaths per million
+death_per_million <- covid%>%
+  select(location,total_deaths_per_million)%>%
+  top_n(10)%>%
+  ggplot(aes(x=total_deaths_per_million, y=reorder(location, total_deaths_per_million))) +
+  geom_segment(aes(yend=location), xend=0, colour="grey50")+
+geom_point(size=3,color = "blue") + # Use a larger dot
+labs(x = "Total deaths per million",
+     title = "Top 10 countries with the highest \n number of total deaths per million",
+     caption = "Figure B") +
+theme(panel.grid.major.x = element_blank(),
+panel.grid.minor.x = element_blank(),
+axis.title.y=element_blank(),
+plot.caption = element_text(color = "red", face = "italic"),
+panel.grid.major.y = element_blank())
+
+
+```
+
+```{r  echo=FALSE, warning=FALSE,fig.height=4,fig.width=10,fig.cap="Dot plots showing the top ten countries with the highest number of cases and deaths per million."}
+#dot plot
+grid.arrange(case_per_million,death_per_million, ncol=2)
+
+```
+
+Looking at *figure A* above, Qatar has the highest number of cases per million followed by Bahrain and others as seen in the figure. San Marino has the highest number of total deaths per million followed by Peru as shown by *figure B* above. We also observe from the two figures that it's not necessarily true that a country with the highest number of total cases per million also has a high number of total deaths per million.
+
+```{r echo = FALSE,warning=FALSE,include=FALSE, fig.height = 8,fig.width = 8, fig.cap = "The figure shows the correlation Matrix of the numeric variables." }
+#correlation between difference variances of the training set
+corr <-cor(covid[-c(1:4)], use = "pairwise.complete.obs")
+corrplot(corr, method = "number")
+
+```
+
+
+# Data Pre-processing
+
+Before performing cluster analysis, data was prepared as follows:
+
+- Estimating the missing values in the data frame and removing highly correlated variables and variables with many missing values. 
+
+- The data was standardized (i.e. scaled) to make these variables comparable.
+
+And these approaches are explained in detail below.
+
+
+## Missing Values.
+
+```{r  echo=FALSE, warning=FALSE,include=FALSE}
+#number of missing values per variable
+sapply(covid, function(x) sum(is.na(x)))
+
+```
+
+
+In the dataset, several variables do miss some of their values. The total number of these missing instances per variable are shown in the table below.
+
+
+```{r, echo=FALSE}
+#table of missing values
+knitr::include_graphics("C:/Users/User/Documents/table.JPG")
+```
+
+
+At first glance, quite a number of variables have missing instances. Handwashing facility variable seems to be missing most of its values (117/280 missing values) and also extreme_poverty,female_smokers, and hospital_beds_per_thousand almost a quarter of their values were not captured. For the life_expectancy variable, the three missing values were all for European countries. 
+
+To address the issue of these missing values, different approaches were used i.e. mean replacement, variable omission, and model value prediction. These approaches are justified as below.
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#getting rid of the handwashing facilities variable
+covid <- covid[-c(28)]
+```
+
++ handwashing facilities variable. This variable was omitted (or deleted) because almost 57% of its values were not captured. Replacement or prediction of these missing values would have given much false representation.
+
++ median_age. Through analysis, it was observed that of 24 missing median ages, 11 missing values were for Europe, 11 for North America, South America, and Oceania were missing 1 value each. And since the range of median age was different for each continent, the missing values couldn't be replaced with the overall variable mean and therefore we decided to replace them with the mean median age of that particular continent.  And it was done in this approach so that countries from the same continent would remain in the median age range of that region.
+
+The same replacement approach that was used upon the median age was also applied to the other variables which had missing values.
+
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#replacing all the missing values in the dataset
+covid <- covid %>% 
+  group_by(continent) %>%
+  mutate(across(total_cases:life_expectancy,
+                function(x) replace(x, is.na(x), mean(x, na.rm=TRUE))))
+
+#checking whether there are still missing values
+sum(is.na(covid))
+```
+
+
+# Modelling
+
+
+The models were fitted using numerical variables only, therefore variables like continent and iso-codes were eliminated from the data frame. And also since the date variable was uniform throughout, it was deleted from the set. The highly correlated variables were got rid of and this was done to have variables that are independent from each other. A high correlation between two variables implies redundancy, indicating a possibility that they are explaining the same aspect. so, it was in this regard that some of these highly correlated variables were removed (selected one of the two variables).
+
+And since the dataset variables are different i.e. have different means and variances, therefore they were scaled before fitting the model. In this, we did not want the clustering algorithm to depend on an arbitrary variable unit.
+ 
+
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#eliminating non-numerical variables and others which other many missing values
+covid1 <- covid[,c(1,5:16,18,21)]
+#making the location column a row names column
+covid1 <- data.frame(covid1, row.names = 1)
+
+```
+
+## Hierarchical Clustering
+
+Different linkage methods i.e. complete, single, average, and centroid were used while fitting the hierarchical clustering model. Changing the linkage method seemed not to change the silhouette average width and the size of the six clusters.
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#setting seed for same values reproducability
+set.seed(123)
+# Compute pairewise distance matrices
+dist.out <- dist(covid1, method = "euclidean")
+
+hie_clu <- hclust(dist.out, method = "single" )
+hie_clu1 <- hclust(dist.out, method = "complete" )
+hie_clu2 <- hclust(dist.out, method = "average" )
+hie_clu3 <- hclust(dist.out, method = "centroid" )
+
+# Cut tree into 4 groups
+sub_grp <- cutree(hie_clu1, k = 6)
+
+
+# Number of members in each cluster
+table(sub_grp)
+```
+
+
+|Cluster| Size |
+|-------|------|
+|1      |186   |
+|2      |4     |
+|3      |14    |
+|4      |2     |
+|5      |1     |
+|6      |1     |
+
+Table: The table shows the number of countries grouped in each cluster.
+
+\newpage
+
+```{r  echo=FALSE, warning=FALSE,fig.height=7,fig.width=10, fig.cap="The figure shows the Hierarchical model's silhouette plots using different linkage methods i.e. Single, complete, centroid, and average."}
+par(mfrow = c(2,2))
+# Plot the silhouette visual for the Hierarchical model
+rainbow <- c("red", "forest green", "blue", "purple","yellow","black")
+sil_cl <- silhouette(cutree(hie_clu,6) ,as.dist(dist.out), title=title(main = 'Good'))
+plot(sil_cl,main = "The silhouette plot:Single Linkage",col=rainbow[1:6],border=NA)
+
+sil_cl1 <- silhouette(cutree(hie_clu1,6) ,as.dist(dist.out), title=title(main = 'Good'))
+plot(sil_cl1,main = "The silhouette plot:Complete Linkage",col=rainbow[1:6],border=NA)
+
+sil_cl2 <- silhouette(cutree(hie_clu2,6) ,as.dist(dist.out), title=title(main = 'Good'))
+plot(sil_cl2,main = "The silhouette plot:Avarage Linkage",col=rainbow[1:6],border=NA)
+
+sil_cl3 <- silhouette(cutree(hie_clu3,6) ,as.dist(dist.out), title=title(main = 'Good'))
+plot(sil_cl3,main = "The silhouette plot:Centroid Linkage",col=rainbow[1:6],border=NA)
+
+```
+From the figures above, no matter the linkage method used, the average silhouette width of the model remains the same as ***0.85***. This width is very close to 1 indicating a strong structure i.e. data points seem to be well matched to their clusters. 
+
+\newpage
+
+
+```{r  echo=FALSE, warning=FALSE,fig.height=5,fig.width=6, fig.cap= "The graph shows the six(6) clusters of the hierarchical Clustering model plotted against the first two principal components of the data and which cluster each country belongs to. It's observed from the figure that five of the six clusters (1,2, and 4) are more of the same whereby there is a small dissimilarity between them since they are close to each other (Same kind of overlapping is seen). Cluster 3 and 6 are more different from the other three."}
+#model plot
+fviz_cluster(list(data = covid1, 
+                  cluster = sub_grp),
+             main = "Model plot with 6 clusters",
+             ellipse.type = "convex",
+             ggtheme = theme_minimal()) +
+  theme(plot.title = element_text(hjust = .5))
+
+```
+
+The model's performance seems to be good in grouping different countries together. The model seems to have clustered countries depending on the number of cases and deaths a country has. Countries in the same range of cases and deaths are grouped together. United States(US) with the highest number of cases and deaths compared to other countries is grouped in its own cluster 6. Countries next to the US in terms of cumulative cases i.e. Brazil and India are grouped in cluster 4. As seen from the figure, clusters 4 and 6 are close to each other meaning they are more similar. Cluster 5 has only Russia a country with one of the highest number of confirmed cases but a low fatality rate.
+
+Cluster 2 has four countries (i.e. Colombia, Peru, Mexico, and South Africa), the common aspect between these countries is that they have registered quite high numbers of cases and deaths(whether total, new, or per million cases and deaths) but smaller than those in clusters 6 and 4. On the table of global cumulative COVID-19 cases, cluster 2 countries come after those in 4 and 6. Cluster 3 is made of mainly European countries which and a few Asian countries which have also been hit badly like those in cluster 2.And countries of cluster 3 have high numbers of total cases and deaths per million. Cluster 1 is of countries with mostly low cases (less than 300000 cases) and below 20000 deaths.
+
+
+
+## Kmeans Clustering
+
+The model of six (6) clusters was fitted using R Kmeans function. The size of these clusters is shown in the table below. Within the cluster, the sum of squares is 76.2%.
+
+|Cluster | Number of elements|
+|--------|-------------------|
+|1       | 3                 |
+|2       | 40                |
+|3       | 155               |
+|4       | 3                 |
+|5       | 1                 |
+|6       | 6                 |
+
+Table: The table shows the number of countries in the six (6) different clusters.
+
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#set seed
+set.seed(123)
+
+#eliminating non-numerical variables and others which other many missing values
+covid1 <- covid[,c(1,5:16)]
+#making the location column a row names column
+covid1 <- data.frame(covid1, row.names = 1)
+#scaling the numerical variables
+covid1 <- scale(covid1)
+
+#fitting the model with 6 clusters using kmeans 
+model_kmeans <- kmeans(covid1, 6,nstart = 25, iter.max = 100)
+
+#printing the model
+print(model_kmeans)
+
+
+# Extract the number of elements in every cluster from the kmeans model
+table(model_kmeans$cluster)
+
+model_kmeans$cluster
+
+model_plot = order(model_kmeans$cluster)
+data.frame(covid$location[model_plot],model_kmeans$cluster[model_plot])
+
+# Extract the cluster assignment vector from the kmeans model
+clust_km2 <- model_kmeans$cluster
+
+model_kmeans$centers
+
+
+```
+
+```{r  echo=FALSE, warning=FALSE,fig.height=4,fig.width=5, fig.cap="The figure shows the Kmeans model's silhouette plot."}
+# Plot the silhouette visual for the Kmeans model
+rainbow <- c("red", "forest green", "blue", "purple","yellow","black")
+plot(silhouette(model_kmeans$cluster, dist(covid1)),
+     main = "The silhouette plot of model: k = 6",col=rainbow[1:6],border=NA)
+```
+
+From the figure above, objects in cluster 6 have a negative silhouette coefficient indicating they are likely in the wrong cluster. It's also seen in the figure that some objects of cluster  2 are on the negative side meaning there is some sort of mis-clustering in those clusters. The overall average silhouette width for the Kmeans clustering model is ***0.56*** and this indicates that a  reasonable structure has been found i.e. data points seem to fairly matched to their clusters. Cluster 4 has the highest average silhouette width of 0.72 meaning it's the most perfectly clustered.
+
+```{r  echo=FALSE, warning=FALSE,fig.height=4,fig.width=6, fig.cap= "The graph shows the six(6) clusters of the Kmeans model plotted against the first two principal components of the data and which cluster each country belongs to. Like the hierarchical Clustering model clusters, 2 to 6 are more of the same whereby there is a small dissimilarity between them. Cluster 1 is more dissimilar from other clusters."}
+
+#plot 
+fviz_cluster(model_kmeans, data = covid1, 
+             main = "Kmeans Model plot with 6 clusters",
+             ellipse.type = "convex",
+             ggtheme = theme_minimal()) +
+  theme(plot.title = element_text(hjust = .5))
+```
+
+Looking at the figure above, countries with the highest global cumulative cases and deaths i.e. Brazil, United States, and India have been grouped in a single cluster 1.These three countries have the highest number of total cases, total deaths, new cases, new deaths, and new cases and deaths smoothed. Cluster 6 has Mexico, Columbia, Argentina, Peru, Australia, and Turks and Caicos Islands, countries with quite high numbers of cases and deaths(whether total, new, or per million cases and deaths) but not like cluster 1. Cluster 4 is made of countries (Aruba, Sint Maarten, and Guam) with one of the highest number of total cases per million, new cases per million, and new cases smoothed per million. Cluster 2 has countries that have been hit badly by the pandemic compared to those in cluster 3. Cluster 5 has countries with high numbers of new deaths per million, new deaths smoothed per million, and total_deaths_per_million. This is clearly described by the bar chart below.
+
+```{r  echo=FALSE, warning=FALSE, fig.cap="Barplot illustrating the features discriminating between the six clusters i.e. which variables that determined the grouping of countries."}
+par(mfrow=c(1, 1), mar=c(4, 4, 4, 2))
+myColors <- c("darkblue","red","green","brown","pink","purple","yellow",
+              "black","orange","grey","azure","brown")
+barplot(t(model_kmeans$centers), beside = TRUE, xlab="cluster",
+ylab="value", col = myColors)
+legend("top", ncol=2, legend = c("total_cases", "new_cases", "new_cases_smoothed",
+"total_deaths", "new_deaths", "new_deaths_smoothed", "total_cases_per_million",
+"new_cases_per_million","new_cases_smoothed_per_million","total_deaths_per_million",
+"new_deaths_per_million","new_deaths_smoothed_per_million"),fill = myColors)
+```
+
+## PAM clustering
+
+Another model of 6 clusters was fitted using the pam() R function. The composition of each cluster (cluster size) is illustrated in the table and figure below.
+
+|Cluster | Cluster Size       |Average width|
+|--------|--------------------|-------------|
+|1       | 109                |0.77         |
+|2       | 35                 |-0.02        |
+|3       | 53                 |-0.12        |
+|4       | 3                  |0.51         |
+|5       | 7                  |-0.10        |
+|6       | 1                  |0.00         |
+
+Table: Size of clusters and their average widths.
+
+At first glance, cluster 1 has the highest average width (0.77), and cluster 4 coming in the second position with a width of 0.51, meaning countries in those clusters are fairly grouped. Clusters 2,3, and 5 have a negative average width meaning most elements in them are likely in wrong clusters.
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+#set seed
+set.seed(123)
+# Generate a k-means model using the pam() function with a k = 6
+pam_model <- pam(covid1, k = 6,metric = "euclidean")
+
+print(pam_model)
+
+pam_model$clusinfo
+
+model_plot1 = order(pam_model$clustering)
+data.frame(pam_model$clustering[model_plot1])
+
+table(covid$continent, pam_model$clustering)
+
+kableExtra::kable(head(pam_model$clustering,20)) 
+```
+
+
+```{r  echo=FALSE, warning=FALSE,fig.height=4,fig.width=5, fig.cap="The figure shows the model's silhouette plot."}
+# Plot the silhouette visual for the pam_k2 model
+rainbow <- c("red", "forest green", "blue", "purple","yellow","black")
+plot(silhouette(pam_model),main = "The silhouette plot of model: k = 6",col=rainbow[1:6],border=NA)
+```
+
+From the figure above, most of the countries in clusters 2,3, and 5 have a negative silhouette coefficient indicating they are likely in the wrong cluster. 
+
+The average silhouette width for the PAM model is ***0.37*** and this means that there is no substantial structure has been found i.e. data points seem not to be well-matched to their clusters.
+
+
+```{r  echo=FALSE, warning=FALSE,fig.cap= "The graph shows the six(6) clusters of the model (fitted using the pam() function) plotted against the first two principal components of the data and which cluster each country belongs to. It's observed from the figure that five of the six clusters (1,2,3,5, and 6) are more of the same meaning there is a small dissimilarity between them. Cluster 4 is a bit far from the other 5 clusters indicating that it's more different compared to them."}
+#model plot
+fviz_cluster(pam_model,main = "Model plot with 6 clusters",
+             ellipse.type = "convex",
+             ggtheme = theme_minimal()) +
+  theme(plot.title = element_text(hjust = .5))
+
+
+```
+
+The model perfectly grouped countries (United States, Brazil, and India) with the highest number of cumulative COVID-19 cases and deaths into single cluster 6. And also other clusters have countries of the same range in terms of registered cases and deaths. This means that clustering in this model was done based on the number of cases and deaths a country has.
+
+\newpage
+
+## Conclusion
+
+In conclusion, depending on the average silhouette width of the clustering methods that were used while building the models as shown in the table, hierarchical clustering performed better in grouping different countries into six clusters with an average silhouette width of $\color{red}{\text{0.85}}$. The performance of Kmeans and PAM wasn't quite impressive. Clustering of countries seemed to have been based on the number of cases, deaths, new cases and deaths, cases per million people, and deaths per million people that a given country had by $02^{nd}/09/2020$ and countries with similar number of those mentioned variables were clustered together.
+
+
+|Clustering Model                   | Average Silhouette Width   |
+|-----------------------------------|-------------------------   |
+|$\color{red}{\text{Hierarchical}}$ | $\color{red}{\text{0.85}}$ |
+|Kmeans                             | 0.56                       |
+|PAM                                | 0.37                       |
+
+
+
+Table: The table shows how different clustering models are performed in grouping countries into several clusters.
+
+Since different countries on the same continent have been affected differently by the virus, in this regard clustering models couldn't group countries continentally/regionally. Countries were clustered depending on how they have been hit by the coronavirus pandemic.
+
+
+```{r  echo=FALSE, warning=FALSE, include=FALSE}
+
+```
+
+\newpage
+# Appendix 
+
+```{r  ref.label=knitr::all_labels(), echo=TRUE,eval=FALSE}
+
+```
